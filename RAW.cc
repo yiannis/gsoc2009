@@ -60,12 +60,14 @@ void RAW::open(const string & filename_)
    if (filename_ == "" && filename == "")
       return;
    if (filename_ != "")
+   {
       if (filename == "")
          filename = filename_;
       else {
          release_members();
          filename = filename_;
       }
+   }
    //EXIF
    //First handle exif data
    load_exif();
@@ -190,7 +192,7 @@ void RAW::open_profile()
 void RAW::get_oyranos_profile()
 {
    oyProfile_s* profile = NULL;
-   oyDeviceGetProfile(oy_device, &profile);
+   oyDeviceGetProfile(oy_device, 0, &profile);
    const char* tmp = oyProfile_GetFileName(profile, -1);
 
    printf("Found profile: \"%s\"\n", tmp?tmp:"---");
