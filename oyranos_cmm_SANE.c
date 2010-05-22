@@ -655,7 +655,6 @@ int Configs_Modify(oyConfigs_s * devices, oyOptions_s * options)
          oyOption_s *name_opt_dev = NULL,
                     *handle_opt_dev = NULL,
                     *context_opt_dev = NULL;
-         oyConfig_s *device_new = NULL;
          oyRankPad *dynamic_rank_map = NULL;
          char *device_name = NULL;
 
@@ -663,7 +662,6 @@ int Configs_Modify(oyConfigs_s * devices, oyOptions_s * options)
           * and a new device is created. Basic options are moved from
           * the old to new device */
          device = oyConfigs_Get(devices, i);
-         device_new = oyConfig_New(CMM_BASE_REG, 0);
 
          INFO(0, "Backend core:\n%s", oyOptions_GetText(device->backend_core, oyNAME_NICK));
          INFO(0, "Data:\n%s", oyOptions_GetText(device->data, oyNAME_NICK));
@@ -673,7 +671,6 @@ int Configs_Modify(oyConfigs_s * devices, oyOptions_s * options)
             WARN( options, "%s",
                  "The \"device_name\" is NULL, or missing from config object!");
             oyConfig_Release(&device);
-            oyConfig_Release(&device_new);
             g_error++;
             continue;
          }
@@ -681,13 +678,12 @@ int Configs_Modify(oyConfigs_s * devices, oyOptions_s * options)
          /*Handle "driver_version" option [OUT] */
          if (version_opt) {
             oyOption_s *tmp = oyOption_Copy(version_opt, 0);
-            oyOptions_MoveIn(device_new->backend_core, &tmp, -1);
+            oyOptions_MoveIn(device->backend_core, &tmp, -1);
          }
 
          /* 1. Get the "device_name" from old device */
          name_opt_dev = oyConfig_Find(device, "device_name");
          device_name = oyOption_GetValueText(name_opt_dev, allocateFunc);
-         oyOptions_MoveIn(device_new->backend_core, &name_opt_dev, -1);
 
          /* 2. Get the "device_context" from old device */
          /* It should be there, see "list" call above */
@@ -695,7 +691,7 @@ int Configs_Modify(oyConfigs_s * devices, oyOptions_s * options)
          if (context_opt_dev) {
             device_context = (SANE_Device*)oyOption_GetData(context_opt_dev, NULL, allocateFunc);
             if (device_context) {
-               oyOptions_MoveIn(device_new->data, &context_opt_dev, -1);
+               oyOptions_MoveIn(device->data, &context_opt_dev, -1);
             } else {
                WARN( options, "%s", "The \"device_context\" is NULL!");
                oyOption_Release(&context_opt_dev);
@@ -709,7 +705,7 @@ int Configs_Modify(oyConfigs_s * devices, oyOptions_s * options)
          /* 3. Get the scanner H/W properties from old device */
          /* FIXME: we only recompute them, just in case they are not in old device */
          if (device_context) {
-            DeviceInfoFromContext_(device_context, &(device_new->backend_core));
+            DeviceInfoFromContext_(device_context, &(device->backend_core));
          }
 
          /* 4. Get the "device_handle" from old device */
@@ -717,7 +713,7 @@ int Configs_Modify(oyConfigs_s * devices, oyOptions_s * options)
          handle_opt_dev = oyConfig_Find(device, "device_handle");
          if (handle_opt_dev) {
             device_handle = (SANE_Handle)((oyCMMptr_s*)handle_opt_dev->value->oy_struct)->ptr;
-            oyOptions_MoveIn(device_new->data, &handle_opt_dev, -1);
+            oyOptions_MoveIn(device->data, &handle_opt_dev, -1);
          } else {
             status = sane_open( device_name, &device_handle );
             if (status != SANE_STATUS_GOOD)
@@ -729,20 +725,12 @@ int Configs_Modify(oyConfigs_s * devices, oyOptions_s * options)
 
          if (handle_opt_dev || status == SANE_STATUS_GOOD) {
             /* Use the device_handle to get the device color options */
-            ColorInfoFromHandle(device_handle, &(device_new->backend_core));
-
-            /*5. Create the rank map*/
-            if (CreateRankMap_(device_handle, &dynamic_rank_map))
-               device_new->rank_map = oyRankMapCopy(dynamic_rank_map, device_new->oy_->allocateFunc_);
-            else
-               g_error++;
+            ColorInfoFromHandle(device_handle, &(device->backend_core));
          }
 
          /*Cleanup*/
          /* Remove old, add new device */
          oyConfig_Release(&device);
-         oyConfigs_ReleaseAt(devices, i);
-         oyConfigs_MoveIn(devices, &device_new, -1);
 
          /*If we had to open a SANE device, we'll have to close it*/
          if (status == SANE_STATUS_GOOD) {
