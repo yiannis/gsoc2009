@@ -32,8 +32,10 @@
 #include "helper.c"
 /* --- internal definitions --- */
 
-#define DBG printf("%s: %d\n", __FILE__, __LINE__ ); fflush(NULL);
-#define PRFX "raw-image.oyRE: "
+#define WARN( obj_, _fmt, ... )  message( oyMSG_WARN, (oyStruct_s*)obj_, \
+                                _DBG_FORMAT_ _fmt, _DBG_ARGS_, __VA_ARGS__ )
+#define INFO( obj_, _fmt, ... )  message( oyMSG_DBG, (oyStruct_s*)obj_, \
+                                _DBG_FORMAT_ _fmt, _DBG_ARGS_, __VA_ARGS__ )
 /* select a own four byte identifier string instead of "dDev" and replace the
  * dDev in the below macros.
  */
@@ -330,7 +332,8 @@ int Configs_FromPattern(const char *registration, oyOptions_s * options, oyConfi
                                         oyOBJECT_CMM_API8_S);
    oyAlloc_f allocateFunc = malloc;
 
-   printf(PRFX "Entering %s(). Options:\n%s", __func__, oyOptions_GetText(options, oyNAME_NICK));
+   if(oy_debug)
+     INFO( options, "Options:\n%s", oyOptions_GetText(options, oyNAME_NICK));
 
    /* "error handling" section */
    if (rank == 0) {
@@ -378,8 +381,8 @@ int Configs_FromPattern(const char *registration, oyOptions_s * options, oyConfi
    if (command_list) {
       /* "list" call section */
 
-      printf(PRFX "Backend core:\n%s", oyOptions_GetText(device->backend_core, oyNAME_NICK));
-      printf(PRFX "Data:\n%s", oyOptions_GetText(device->data, oyNAME_NICK));
+      INFO( options, "Backend core:\n%s", oyOptions_GetText(device->backend_core, oyNAME_NICK));
+      INFO( options, "Data:\n%s", oyOptions_GetText(device->data, oyNAME_NICK));
 
       const char **device_list = LibRaw::cameraList();
       int num_devices = LibRaw::cameraCount();
@@ -411,7 +414,7 @@ int Configs_FromPattern(const char *registration, oyOptions_s * options, oyConfi
          device_list_opt->value = (oyValue_u*)device_list_opt->oy_->allocateFunc_(sizeof(oyValue_u));
          int i = 0;
          while(device_list[i++]);
-         printf("################### Found %d devices #######################\n",i-1);
+         INFO( options,"################### Found %d devices #######################\n",i-1);
          //device_list_opt->value->string_list = const_cast<char**>(device_list);
          device_list_opt->value->string_list = (char**) device_list_opt->oy_->allocateFunc_(sizeof(char*) * i);
          memset( device_list_opt->value->string_list, 0, sizeof(char*) * i );
@@ -466,14 +469,14 @@ int Configs_FromPattern(const char *registration, oyOptions_s * options, oyConfi
    } else if (command_properties) {
       /* "properties" call section */
 
-      printf(PRFX "Backend core:\n%s", oyOptions_GetText(device->backend_core, oyNAME_NICK));
-      printf(PRFX "Data:\n%s", oyOptions_GetText(device->data, oyNAME_NICK));
+      INFO( options, "Backend core:\n%s", oyOptions_GetText(device->backend_core, oyNAME_NICK));
+      INFO( options, "Data:\n%s", oyOptions_GetText(device->data, oyNAME_NICK));
 
       /*Handle "device_handle" option [IN]*/
       if (handle_opt) {
          DeviceFromHandle_opt(device, handle_opt);
       } else { /*Bail out if no "device_handle" given*/
-         printf("Missing \"device_handle\" option\n");
+         WARN( options, "Missing \"device_handle\" option\n", "" );
          return 1;
       }
 
@@ -520,7 +523,7 @@ int Configs_Modify(oyConfigs_s * devices, oyOptions_s * options)
 {
    oyAlloc_f allocateFunc = malloc;
 
-   printf(PRFX "Entering %s(). Options:\n%s", __func__, oyOptions_GetText(options, oyNAME_NICK));
+   INFO( options, "Entering %s(). Options:\n%s", __func__, oyOptions_GetText(options, oyNAME_NICK));
 
    /* "error handling" section */
    if (!devices || !oyConfigs_Count(devices)) {
@@ -555,8 +558,8 @@ int Configs_Modify(oyConfigs_s * devices, oyOptions_s * options)
          int error = 0;
          oyConfig_s *device = oyConfigs_Get(devices, i);
 
-         printf(PRFX "Backend core:\n%s", oyOptions_GetText(device->backend_core, oyNAME_NICK));
-         printf(PRFX "Data:\n%s", oyOptions_GetText(device->data, oyNAME_NICK));
+         INFO( options,"Backend core:\n%s", oyOptions_GetText(device->backend_core, oyNAME_NICK));
+         INFO( options, "Data:\n%s", oyOptions_GetText(device->data, oyNAME_NICK));
 
          /*Handle "driver_version" option [IN/OUT] */
          oyOption_s *version_opt_dev = oyConfig_Find(device, "driver_version");
@@ -601,8 +604,8 @@ int Configs_Modify(oyConfigs_s * devices, oyOptions_s * options)
          oyConfig_s *device = oyConfigs_Get(devices, i);
          oyConfig_s *device_new = oyConfig_New(CMM_BASE_REG, 0);
 
-         printf(PRFX "Backend core:\n%s", oyOptions_GetText(device->backend_core, oyNAME_NICK));
-         printf(PRFX "Data:\n%s", oyOptions_GetText(device->data, oyNAME_NICK));
+         INFO( options, "Backend core:\n%s", oyOptions_GetText(device->backend_core, oyNAME_NICK));
+         INFO( options, "Data:\n%s", oyOptions_GetText(device->data, oyNAME_NICK));
 
          /* All previous device properties are considered obsolete
           * and a new device is created. Basic options are moved from
@@ -959,7 +962,7 @@ int DeviceFromHandle_opt(oyConfig_s *device, oyOption_s *handle_opt)
                device_handle = Exiv2::ImageFactory::open(raw_data, size);
             break;
          default:
-            printf("Option \"device_handle\" is of a wrong type\n");
+            WARN( device, "Option \"device_handle\" is of a wrong type", "");
             break;
       }
 
@@ -967,7 +970,7 @@ int DeviceFromHandle_opt(oyConfig_s *device, oyOption_s *handle_opt)
       if (device_handle.get() && device_handle->good())
          DeviceFromHandle(&device->backend_core, device_handle);
       else {
-         printf("Unable to open raw image.\n");
+         WARN( device, "Unable to open raw image.","");
          return 1;
       }
    } else
