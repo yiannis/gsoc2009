@@ -258,12 +258,14 @@ int Configs_FromPattern(const char *registration, oyOptions_s * options, oyConfi
       return 1;
    }
 
+#if 0
    if (!device_name && command_properties) {
       message(oyMSG_WARN, (oyStruct_s *) options, _DBG_FORMAT_ "\n "
               "Device_name is mandatory for properties command:\n%s",
               _DBG_ARGS_, oyOptions_GetText(options, oyNAME_NICK));
       return 1;
    }
+#endif
 
    /* "help" call section */
    if (oyOptions_FindString(options, "command", "help") || !options || !oyOptions_Count(options)) {
@@ -387,69 +389,95 @@ int Configs_FromPattern(const char *registration, oyOptions_s * options, oyConfi
       SANE_Device *aux_context = NULL;
       SANE_Handle device_handle = NULL;
 
-      /*Return a full list of scanner H/W &
-       * SANE driver S/W color options
-       * with the according rank map */
+      GetDevices(&device_list, &num_devices);
 
-      device = oyConfig_New(CMM_BASE_REG, 0);
-
-      /*Handle "driver_version" option [OUT] */
-      if (version_opt) {
-         oyOption_s *tmp = oyOption_Copy(version_opt, 0);
-         oyOptions_MoveIn(device->backend_core, &tmp, -1);
+      if (device_name &&   /*If a user provides a device_name option,*/
+          !context_opt &&  /*and does not need the device_context data,*/
+          !name_opt        /*or the oyNAME_NAME description*/
+         )
+         num_devices = 1;  /*then we can get away without calling GetDevices()*/
+      else if(!num_devices || !device_list) {
+         num_devices = 0; /*So that for loop will not run*/
+         ++g_error;
       }
 
-      /*1a. Get the "device_context"*/
-      if (!context_opt) { /*we'll have to get it ourselves*/
-         if (GetDevices(&device_list, &num_devices) == 0) {
-            device_context = *device_list;
-            while (device_context) {
-               if (strcmp(device_name,device_context->name) == 0)
-                  break;
-               device_context++;
-            }
-            if (!device_context) {
+      for (i = 0; i < num_devices; ++i) {
+        const char *sane_name = NULL,
+                   *sane_model = NULL;
+
+        if (device_list) {
+           sane_name = device_list[i]->name;
+           sane_model = device_list[i]->model;
+        } else {
+           sane_name = device_name;
+        }
+
+        /*Handle "device_name" option [IN] */
+        if (device_name &&                        /*device_name is provided*/
+            sane_name &&                          /*and sane_name has been retrieved*/
+            strcmp(device_name, sane_name) != 0)  /*and they don't match,*/
+           continue;                              /*then try the next*/
+
+        /*Return a full list of scanner H/W &
+         * SANE driver S/W color options
+         * with the according rank map */
+
+        device = oyConfig_New(CMM_BASE_REG, 0);
+
+        /*Handle "driver_version" option [OUT] */
+        if (version_opt) {
+           oyOption_s *tmp = oyOption_Copy(version_opt, 0);
+           oyOptions_MoveIn(device->backend_core, &tmp, -1);
+        }
+
+        /*1a. Get the "device_context"*/
+        if (!context_opt) { /*we'll have to get it ourselves*/
+              device_context = *device_list;
+              while (device_context) {
+                 if (strcmp(sane_name,device_context->name) == 0)
+                    break;
+                 device_context++;
+              }
+              if (!device_context) {
+                message( oyMSG_WARN, (oyStruct_s*)options,
+                _DBG_FORMAT_ "device_name does not match any installed device.",
+                _DBG_ARGS_);
+                 g_error++;
+              }
+        } else {
+           aux_context = (SANE_Device*)oyOption_GetData(context_opt, NULL, allocateFunc);
+           device_context = aux_context;
+        }
+
+        /*1b. Use the "device_context"*/
+        if(device_context)
+           error = DeviceInfoFromContext_(device_context, &(device->backend_core));
+
+        /*2a. Get the "device_handle"*/
+        if (!handle_opt) {
+           status = sane_open( sane_name, &device_handle );
+           if (status != SANE_STATUS_GOOD) {
               message( oyMSG_WARN, (oyStruct_s*)options,
-              _DBG_FORMAT_ "device_name does not match any installed device.",
-              _DBG_ARGS_);
-               g_error++;
-            }
-         } else {
-            g_error++;
-         }
-      } else {
-         aux_context = (SANE_Device*)oyOption_GetData(context_opt, NULL, allocateFunc);
-         device_context = aux_context;
+              _DBG_FORMAT_ "Unable to open sane device \"%s\": %s",
+              _DBG_ARGS_,
+              sane_name, sane_strstatus(status));
+              g_error++;
+           }
+        } else {
+           device_handle = (SANE_Handle)((oyCMMptr_s*)handle_opt->value->oy_struct)->ptr;
+        }
+
+        if (device_handle) {
+           /*2b. Use the "device_handle"*/
+           ColorInfoFromHandle(device_handle, &(device->backend_core));
+
+           /*3. Create the rank map*/
+           error = CreateRankMap_(device_handle, &dynamic_rank_map);
+            if (!error)
+              device->rank_map = oyRankMapCopy(dynamic_rank_map, device->oy_->allocateFunc_);
+        }
+        oyConfigs_MoveIn(devices, &device, -1);
       }
-
-      /*1b. Use the "device_context"*/
-      if (device_context)
-         error = DeviceInfoFromContext_(device_context, &(device->backend_core));
-
-      /*2a. Get the "device_handle"*/
-      if (!handle_opt) {
-         status = sane_open( device_name, &device_handle );
-         if (status != SANE_STATUS_GOOD) {
-            message( oyMSG_WARN, (oyStruct_s*)options,
-            _DBG_FORMAT_ "Unable to open sane device \"%s\": %s",
-            _DBG_ARGS_,
-            device_name, sane_strstatus(status));
-            g_error++;
-         }
-      } else {
-         device_handle = (SANE_Handle)((oyCMMptr_s*)handle_opt->value->oy_struct)->ptr;
-      }
-
-      if (device_handle) {
-         /*2b. Use the "device_handle"*/
-         ColorInfoFromHandle(device_handle, &(device->backend_core));
-
-         /*3. Create the rank map*/
-         error = CreateRankMap_(device_handle, &dynamic_rank_map);
-         if (!error)
-            device->rank_map = oyRankMapCopy(dynamic_rank_map, device->oy_->allocateFunc_);
-      }
-      oyConfigs_MoveIn(devices, &device, -1);
 
       /*Cleanup*/
       free(dynamic_rank_map);
@@ -592,7 +620,7 @@ int Configs_Modify(oyConfigs_s * devices, oyOptions_s * options)
          context_opt_dev = oyConfig_Find(device, "device_context");
          if (!context_opt_dev) {
             WARN( options, "%s", "The \"device_context\" option is missing!");
-            error = g_error = 1;
+            error = g_error = -1;
          }
          if (!error) {
             device_context = (SANE_Device*)oyOption_GetData(context_opt_dev, NULL, allocateFunc);
@@ -754,13 +782,14 @@ int Configs_Modify(oyConfigs_s * devices, oyOptions_s * options)
          free(dynamic_rank_map);
          free(device_name);
       }
-   } else {
+   } else if(!oyOptions_FindString(options, "command", "setup") &&
+             !oyOptions_FindString(options, "command", "unset")) {
       /*unsupported, wrong or no command */
       message(oyMSG_WARN, (oyStruct_s *) options, _DBG_FORMAT_ "\n "
               "No supported commands in options:\n%s", _DBG_ARGS_,
               oyOptions_GetText(options, oyNAME_NICK) );
       ConfigsFromPatternUsage((oyStruct_s *) options);
-      g_error = 1;
+      g_error = 0;
    }
 
    /*Cleanup*/
