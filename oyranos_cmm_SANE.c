@@ -1,6 +1,6 @@
 /** @file oyranos_cmm_SANE.c
  *
- *  Oyranos is an open source Colour Management System 
+ *  Oyranos is an open source Colour Management System
  *
  *  @par Copyright:
  *            2009 (C) Yiannis Belias
@@ -26,8 +26,11 @@
 #include "SANE_help.c"
 /* --- internal definitions --- */
 
-#define DBG printf("%s: %d\n", __FILE__, __LINE__ ); fflush(NULL);
-#define PRFX "scanner.SANE: "
+#define WARN( obj_, _fmt, ... )  message( oyMSG_WARN, (oyStruct_s*)obj_, \
+                                _DBG_FORMAT_ _fmt, _DBG_ARGS_, __VA_ARGS__ )
+#define INFO( obj_, _fmt, ... )  message( oyMSG_DBG, (oyStruct_s*)obj_, \
+                                _DBG_FORMAT_ _fmt, _DBG_ARGS_, __VA_ARGS__ )
+
 /* select a own four byte identifier string instead of "dDev" and replace the
  * dDev in the below macros.
  */
@@ -119,9 +122,9 @@ int CMMMessageFuncSet(oyMessage_f message_func)
 void ConfigsFromPatternUsage(oyStruct_s * options)
 {
     /** oyMSG_WARN should make shure our message is visible. */
-   message(oyMSG_WARN, options, _DBG_FORMAT_ "\n %s",
-           _DBG_ARGS_, "The following help text informs about the communication protocol.");
-   message(oyMSG_WARN, options, "%s()\n%s", __func__, help_message);
+   WARN( options, "\n %s",
+          "The following help text informs about the communication protocol.");
+   WARN( options, "%s", help_message);
 
    return;
 }
@@ -179,13 +182,12 @@ int GetDevices(const SANE_Device *** device_list, int *size)
    int status, s = 0;
    const SANE_Device **dl = NULL;
 
-   printf(PRFX "Scanning SANE devices...");
+   INFO( 0, "%s", "Scanning SANE devices..." );
    fflush(NULL);
    status = sane_get_devices(&dl, SANE_FALSE);
    if (status != SANE_STATUS_GOOD) {
-      message(oyMSG_WARN, 0,
-              "%s()\n Cannot get sane devices: %s\n",
-              __func__, sane_strstatus(status));
+      WARN( 0, "%s()\n Cannot get sane devices: %s",
+              _sane_strstatus(status));
       fflush(NULL);
       return 1;
    }
@@ -194,7 +196,7 @@ int GetDevices(const SANE_Device *** device_list, int *size)
    while (dl[s]) s++;
    *size = s;
 
-   printf("OK [%d]\n", s);
+   INFO( 0, "OK [%d]", s );
    fflush(NULL);
 
    return 0;
@@ -224,7 +226,9 @@ int Configs_FromPattern(const char *registration, oyOptions_s * options, oyConfi
    const char *device_name = 0, *command_list = 0, *command_properties = 0;
    const SANE_Device **device_list = NULL;
 
-   printf(PRFX "Entering %s(). Options:\n%s", __func__, oyOptions_GetText(options, oyNAME_NICK));
+   message( oyMSG_DBG, (oyStruct_s*)options,
+            _DBG_FORMAT_ "Entering %s(). Options:\n%s", _DBG_ARGS_,
+            oyOptions_GetText(options, oyNAME_NICK));
 
    int rank = oyFilterRegistrationMatch(_api8.registration, registration,
                                         oyOBJECT_CMM_API8_S);
@@ -358,7 +362,10 @@ int Configs_FromPattern(const char *registration, oyOptions_s * options, oyConfi
                                       CMM_BASE_REG OY_SLASH "device_handle",
                                       (oyStruct_s **) &handle_ptr, OY_CREATE_NEW);
             } else
-               printf(PRFX "Unable to open sane device \"%s\": %s\n", sane_name, sane_strstatus(status));
+              message( oyMSG_WARN, (oyStruct_s*)options,
+              _DBG_FORMAT_ "Unable to open sane device \"%s\": %s",
+              _DBG_ARGS_,
+              sane_name, sane_strstatus(status));
          }
 
          device->rank_map = oyRankMapCopy(_rank_map, device->oy_->allocateFunc_);
@@ -402,7 +409,9 @@ int Configs_FromPattern(const char *registration, oyOptions_s * options, oyConfi
                device_context++;
             }
             if (!device_context) {
-               printf(PRFX "device_name does not match any installed device.\n");
+              message( oyMSG_WARN, (oyStruct_s*)options,
+              _DBG_FORMAT_ "device_name does not match any installed device.",
+              _DBG_ARGS_);
                g_error++;
             }
          } else {
@@ -421,7 +430,10 @@ int Configs_FromPattern(const char *registration, oyOptions_s * options, oyConfi
       if (!handle_opt) {
          status = sane_open( device_name, &device_handle );
          if (status != SANE_STATUS_GOOD) {
-            printf(PRFX "Unable to open sane device \"%s\": %s\n", device_name, sane_strstatus(status));
+            message( oyMSG_WARN, (oyStruct_s*)options,
+            _DBG_FORMAT_ "Unable to open sane device \"%s\": %s",
+            _DBG_ARGS_,
+            device_name, sane_strstatus(status));
             g_error++;
          }
       } else {
@@ -455,8 +467,10 @@ int Configs_FromPattern(const char *registration, oyOptions_s * options, oyConfi
 
    /*Global Cleanup*/
    if (call_sane_exit) {
-      printf(PRFX "sane_exit()\n");
-      sane_exit();
+     message( oyMSG_DBG, (oyStruct_s*)options,
+            _DBG_FORMAT_ "sane_exit()",
+            _DBG_ARGS_);
+     sane_exit();
    }
 
    oyOption_Release(&context_opt);
@@ -464,7 +478,9 @@ int Configs_FromPattern(const char *registration, oyOptions_s * options, oyConfi
    oyOption_Release(&version_opt);
    oyOption_Release(&name_opt );
 
-   printf(PRFX "Leaving %s\n", __func__);
+   message( oyMSG_DBG, (oyStruct_s*)options,
+            _DBG_FORMAT_ "Leaving",
+            _DBG_ARGS_);
    return g_error;
 }
 
@@ -491,12 +507,11 @@ int Configs_Modify(oyConfigs_s * devices, oyOptions_s * options)
 
    oyAlloc_f allocateFunc = malloc;
 
-   printf(PRFX "Entering %s(). Options:\n%s", __func__, oyOptions_GetText(options, oyNAME_NICK));
+   INFO( options, "Options:\n%s", oyOptions_GetText(options, oyNAME_NICK));
 
    /* "error handling" section */
    if (!devices || !oyConfigs_Count(devices)) {
-      message(oyMSG_WARN, (oyStruct_s *) options, _DBG_FORMAT_ "\n "
-              "No devices given! Options:\n%s", _DBG_ARGS_,
+      WARN( options, "No devices given! Options:\n%s",
               oyOptions_GetText(options, oyNAME_NICK) );
       return 1;
    }
@@ -549,13 +564,13 @@ int Configs_Modify(oyConfigs_s * devices, oyOptions_s * options)
 
          device = oyConfigs_Get(devices, i);
 
-         printf(PRFX "Backend core:\n%s", oyOptions_GetText(device->backend_core, oyNAME_NICK));
-         printf(PRFX "Data:\n%s", oyOptions_GetText(device->data, oyNAME_NICK));
+         INFO( 0, "Backend core:\n%s", oyOptions_GetText(device->backend_core, oyNAME_NICK));
+         INFO( 0, "Data:\n%s", oyOptions_GetText(device->data, oyNAME_NICK));
 
          /*Ignore device without a device_name*/
          if (!oyOptions_FindString(device->backend_core, "device_name", NULL)) {
-            message(oyMSG_WARN, (oyStruct_s *) options, _DBG_FORMAT_ ": %s\n",
-                    _DBG_ARGS_, "The \"device_name\" is missing from config object!");
+            WARN( options, "%s",
+                  "The \"device_name\" is missing from config object!");
             oyConfig_Release(&device);
             g_error++;
             continue;
@@ -576,8 +591,7 @@ int Configs_Modify(oyConfigs_s * devices, oyOptions_s * options)
           * because it takes too long*/
          context_opt_dev = oyConfig_Find(device, "device_context");
          if (!context_opt_dev) {
-            message(oyMSG_WARN, (oyStruct_s *) options, _DBG_FORMAT_ ": %s\n",
-                    _DBG_ARGS_, "The \"device_context\" option is missing!");
+            WARN( options, "%s", "The \"device_context\" option is missing!");
             error = g_error = 1;
          }
          if (!error) {
@@ -612,7 +626,8 @@ int Configs_Modify(oyConfigs_s * devices, oyOptions_s * options)
                                       CMM_BASE_REG OY_SLASH "device_handle",
                                       (oyStruct_s **) &handle_ptr, OY_CREATE_NEW);
             } else
-               printf(PRFX "Unable to open sane device \"%s\": %s\n", sane_name, sane_strstatus(status));
+               INFO( options, "Unable to open sane device \"%s\": %s",
+                     sane_name, sane_strstatus(status) );
          }
 
          /*Create static rank_map, if not already there*/
@@ -650,13 +665,13 @@ int Configs_Modify(oyConfigs_s * devices, oyOptions_s * options)
          device = oyConfigs_Get(devices, i);
          device_new = oyConfig_New(CMM_BASE_REG, 0);
 
-         printf(PRFX "Backend core:\n%s", oyOptions_GetText(device->backend_core, oyNAME_NICK));
-         printf(PRFX "Data:\n%s", oyOptions_GetText(device->data, oyNAME_NICK));
+         INFO(0, "Backend core:\n%s", oyOptions_GetText(device->backend_core, oyNAME_NICK));
+         INFO(0, "Data:\n%s", oyOptions_GetText(device->data, oyNAME_NICK));
 
          /*Ignore device without a device_name*/
          if (!oyOptions_FindString(device->backend_core, "device_name", NULL)) {
-            message(oyMSG_WARN, (oyStruct_s *) options, _DBG_FORMAT_ ": %s\n",
-                    _DBG_ARGS_, "The \"device_name\" is NULL, or missing from config object!");
+            WARN( options, "%s",
+                 "The \"device_name\" is NULL, or missing from config object!");
             oyConfig_Release(&device);
             oyConfig_Release(&device_new);
             g_error++;
@@ -682,14 +697,12 @@ int Configs_Modify(oyConfigs_s * devices, oyOptions_s * options)
             if (device_context) {
                oyOptions_MoveIn(device_new->data, &context_opt_dev, -1);
             } else {
-               message(oyMSG_WARN, (oyStruct_s *) options, _DBG_FORMAT_ ": %s\n",
-                       _DBG_ARGS_, "The \"device_context\" is NULL!");
+               WARN( options, "%s", "The \"device_context\" is NULL!");
                oyOption_Release(&context_opt_dev);
                g_error++;
             }
          } else {
-            message(oyMSG_WARN, (oyStruct_s *) options, _DBG_FORMAT_ ": %s\n",
-                    _DBG_ARGS_, "The \"device_context\" option is missing!");
+            WARN( options, "%s", "The \"device_context\" option is missing!");
             g_error++;
          }
 
@@ -706,12 +719,12 @@ int Configs_Modify(oyConfigs_s * devices, oyOptions_s * options)
             device_handle = (SANE_Handle)((oyCMMptr_s*)handle_opt_dev->value->oy_struct)->ptr;
             oyOptions_MoveIn(device_new->data, &handle_opt_dev, -1);
          } else {
-            printf(PRFX "Opening sane device \"%s\"..", device_name); fflush(NULL);
             status = sane_open( device_name, &device_handle );
             if (status != SANE_STATUS_GOOD)
-               printf("[FAIL: %s]\n", sane_strstatus(status));
+              WARN(0, "Opening sane device \"%s\"[FAIL: %s]",
+                       device_name, sane_strstatus(status));
             else
-               printf("[OK]\n");
+              INFO( options, "Opening sane device \"%s\" [OK]", device_name);
          }
 
          if (handle_opt_dev || status == SANE_STATUS_GOOD) {
@@ -733,7 +746,7 @@ int Configs_Modify(oyConfigs_s * devices, oyOptions_s * options)
 
          /*If we had to open a SANE device, we'll have to close it*/
          if (status == SANE_STATUS_GOOD) {
-            printf(PRFX "sane_close(%s)\n", device_name);
+            INFO( options, "sane_close(%s)", device_name);
             sane_close(device_handle);
          }
 
@@ -752,13 +765,13 @@ int Configs_Modify(oyConfigs_s * devices, oyOptions_s * options)
 
    /*Cleanup*/
    if (call_sane_exit) {
-      printf(PRFX "sane_exit()\n");
+      INFO( options, "%s", "sane_exit()" );
       sane_exit();
    }
 
    oyOption_Release(&version_opt);
 
-   printf(PRFX "Leaving %s\n", __func__);
+   INFO( options, "%s", "Leaving %s");
    return g_error;
 }
 
@@ -1091,7 +1104,7 @@ int ColorInfoFromHandle(const SANE_Handle device_handle, oyOptions_s **options)
                oyOptions_SetFromText(options, registration, (const char *)value, OY_CREATE_NEW);
                break;
             default:
-               printf(PRFX "Do not know what to do with option %d\n", opt->type);
+               WARN( opt, "Do not know what to do with option %d", opt->type);
                return 1;
                break;
          }
@@ -1201,7 +1214,7 @@ int check_driver_version(oyOptions_s *options, oyOption_s **version_opt_p, int *
    else { /*we have to call sane_init()*/
       status = sane_init(&driver_version, NULL);
       if (status == SANE_STATUS_GOOD) {
-         printf(PRFX "SANE v.(%d.%d.%d) init...OK\n",
+         INFO( options, "SANE v.(%d.%d.%d) init...OK",
                 SANE_VERSION_MAJOR(driver_version),
                 SANE_VERSION_MINOR(driver_version),
                 SANE_VERSION_BUILD(driver_version));
