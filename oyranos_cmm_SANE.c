@@ -698,12 +698,25 @@ int Configs_Modify(oyConfigs_s * devices, oyOptions_s * options)
                g_error++;
             }
          } else {
-            WARN( options, "%s", "The \"device_context\" option is missing!");
-            g_error++;
+           const SANE_Device **device_list = NULL;
+           int num = 0;
+           if (GetDevices(&device_list, &num) == 0) {
+             device_context = *device_list;
+             while (device_context) {
+               if (strcmp(device_name,device_context->name) == 0)
+                  break;
+               device_context++;
+             }
+             if (!device_context) {
+               message( oyMSG_WARN, (oyStruct_s*)options,
+               _DBG_FORMAT_ "device_name does not match any installed device.",
+               _DBG_ARGS_);
+               g_error++;
+             }
+           }
          }
 
          /* 3. Get the scanner H/W properties from old device */
-         /* FIXME: we only recompute them, just in case they are not in old device */
          if (device_context) {
             DeviceInfoFromContext_(device_context, &(device->backend_core));
          }
@@ -739,7 +752,6 @@ int Configs_Modify(oyConfigs_s * devices, oyOptions_s * options)
          }
 
          free(dynamic_rank_map);
-         free(device_context);
          free(device_name);
       }
    } else {
